@@ -1,13 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ItineraryItem, TranslationResult } from "../types";
 
-// Declare process to avoid TS errors
-declare var process: {
-  env: {
-    API_KEY: string;
-  }
-};
-
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Using gemini-2.5-flash as recommended for general text tasks
