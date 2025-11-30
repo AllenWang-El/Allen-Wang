@@ -1,0 +1,17 @@
+{
+  "name": "河內旅遊App",
+  "short_name": "河內之旅",
+  "description": "蛋蛋全家的旅遊行程和工具App。",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f766e",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
