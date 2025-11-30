@@ -1,4 +1,5 @@
 
+
 import { DayInfo, ItineraryItem, Expense, BackupSpot, PackingItem, Phrase, User, EmergencyContact } from "./types";
 
 export const USERS: User[] = [
@@ -20,12 +21,12 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 export const INITIAL_DAYS: DayInfo[] = [
-    { date: '2024-12-31', week: '週二', day: '31', weather: 'cloudy', temp: 18 },
-    { date: '2025-01-01', week: '週三', day: '01', weather: 'sunny', temp: 21 },
-    { date: '2025-01-02', week: '週四', day: '02', weather: 'cloudy', temp: 16 },
-    { date: '2025-01-03', week: '週五', day: '03', weather: 'sunny', temp: 19 },
-    { date: '2025-01-04', week: '週六', day: '04', weather: 'sunny', temp: 20 },
-    { date: '2025-01-05', week: '週日', day: '05', weather: 'cloudy', temp: 19 },
+    { date: '2024-12-31', week: '週三', day: '31', weather: 'cloudy', temp: 18 },
+    { date: '2025-01-01', week: '週四', day: '01', weather: 'sunny', temp: 21 },
+    { date: '2025-01-02', week: '週五', day: '02', weather: 'cloudy', temp: 16 },
+    { date: '2025-01-03', week: '週六', day: '03', weather: 'sunny', temp: 19 },
+    { date: '2025-01-04', week: '週日', day: '04', weather: 'sunny', temp: 20 },
+    { date: '2025-01-05', week: '週一', day: '05', weather: 'cloudy', temp: 19 },
 ];
 
 export const DAY_SUBTITLES: Record<number, string> = {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DayInfo, ItineraryItem, Expense, BackupSpot, CategoryType, PackingItem, UtilityTabType, ExpenseCategoryType, Note, TranslationResult } from './types';
 import { INITIAL_DAYS, INITIAL_ITINERARY, INITIAL_EXPENSES, BACKUP_SPOTS, DAY_SUBTITLES, EXCHANGE_RATES, CATEGORIES, INITIAL_PACKING_LIST, CURRENCY_OPTIONS, USERS, EXPENSE_CATEGORIES, EMERGENCY_CONTACTS, OFFLINE_MAP_IMAGES, USEFUL_PHRASES } from './constants';
@@ -10,6 +11,7 @@ import { translateText } from './services/geminiService';
 
 const App: React.FC = () => {
   // State
+  const [showLanding, setShowLanding] = useState(true);
   const [activeTab, setActiveTab] = useState('itinerary');
   const [currentDate, setCurrentDate] = useState('2024-12-31');
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -29,6 +31,27 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : BACKUP_SPOTS;
   });
   
+  // Persistence for Current State
+  useEffect(() => {
+      const savedDate = localStorage.getItem('hanoi_current_date');
+      const savedTab = localStorage.getItem('hanoi_active_tab');
+      
+      // If we have saved state, load it. If not, show landing page.
+      if (savedDate) {
+          setCurrentDate(savedDate);
+          setShowLanding(false); // Skip landing if returning user
+      }
+      if (savedTab) setActiveTab(savedTab);
+  }, []);
+
+  useEffect(() => {
+      localStorage.setItem('hanoi_current_date', currentDate);
+  }, [currentDate]);
+
+  useEffect(() => {
+      localStorage.setItem('hanoi_active_tab', activeTab);
+  }, [activeTab]);
+
   // Utility States
   const [utilityView, setUtilityView] = useState<UtilityTabType | 'menu'>('menu');
   const [packingList, setPackingList] = useState<PackingItem[]>(() => {
@@ -84,8 +107,6 @@ const App: React.FC = () => {
           setNotes([]);
       }
   }, [currentUser]);
-
-  // Save Notes logic is handled in addNote
 
   // Derived State
   const filteredItinerary = useMemo(() => {
@@ -357,38 +378,52 @@ const App: React.FC = () => {
   };
 
   const handleStartListening = (lang: 'zh' | 'vi') => {
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-          alert("您的瀏覽器不支援語音辨識功能");
+      // Browser compatibility check
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (!SpeechRecognition) {
+          alert("抱歉，您的手機或瀏覽器不支援語音辨識功能。\n請嘗試使用 Chrome 或 Safari 瀏覽器。");
           return;
       }
       
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.lang = lang === 'zh' ? 'zh-TW' : 'vi-VN';
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      try {
+          const recognition = new SpeechRecognition();
+          recognition.lang = lang === 'zh' ? 'zh-TW' : 'vi-VN';
+          recognition.continuous = false;
+          recognition.interimResults = false;
 
-      recognition.onstart = () => {
-          setIsTranslating(true);
-          setSpeechText('聆聽中...');
-      };
+          recognition.onstart = () => {
+              setIsTranslating(true);
+              setSpeechText('聆聽中...');
+          };
 
-      recognition.onresult = async (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setSpeechText(transcript);
-          const result = await translateText(transcript, lang);
-          setTranslation(result);
-          setIsTranslating(false);
-      };
+          recognition.onresult = async (event: any) => {
+              const transcript = event.results[0][0].transcript;
+              setSpeechText(transcript);
+              const result = await translateText(transcript, lang);
+              setTranslation(result);
+              setIsTranslating(false);
+          };
 
-      recognition.onerror = (event: any) => {
-          console.error("Speech error", event);
-          setIsTranslating(false);
-          setSpeechText('');
-          alert("語音辨識失敗，請重試");
-      };
+          recognition.onerror = (event: any) => {
+              console.error("Speech error", event);
+              setIsTranslating(false);
+              setSpeechText('辨識失敗');
+              alert(`語音辨識錯誤: ${event.error || '未知錯誤'}\n請確保已授權麥克風權限。`);
+          };
 
-      recognition.start();
+          recognition.onend = () => {
+              // If stopped without result, reset state
+              if (speechText === '聆聽中...') {
+                  setIsTranslating(false);
+                  setSpeechText('');
+              }
+          };
+
+          recognition.start();
+      } catch (err) {
+          alert("啟動語音辨識時發生錯誤。請確認您的麥克風權限。");
+      }
   };
   
   const handleSaveNote = () => {
@@ -433,6 +468,10 @@ const App: React.FC = () => {
       setShowLoginModal(true);
   };
 
+  const handleEnterApp = () => {
+      setShowLanding(false);
+  };
+
   // Helper styles
   const getCategoryColor = (cat: CategoryType) => {
       const colors: Record<string, string> = {
@@ -452,13 +491,38 @@ const App: React.FC = () => {
       return 'fas fa-sun';
   };
 
+  // LANDING PAGE
+  if (showLanding) {
+      return (
+          <div className="h-full w-full bg-primary flex flex-col items-center justify-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-full bg-[url('https://images.unsplash.com/photo-1555663784-06f743df0328?q=80&w=800')] bg-cover bg-center opacity-20"></div>
+              <div className="z-10 text-center text-white p-6 space-y-6 animate-scale-up">
+                  <div className="w-24 h-24 bg-white rounded-full mx-auto flex items-center justify-center shadow-2xl mb-4">
+                      <span className="text-5xl">🇻🇳</span>
+                  </div>
+                  <h1 className="text-4xl font-bold tracking-wide drop-shadow-md">古城記憶</h1>
+                  <p className="text-xl text-teal-100 font-light">北越河內．下龍灣．安子山</p>
+                  <p className="text-sm text-teal-200/80 mt-2">蛋蛋全家旅遊 2024-2025</p>
+                  
+                  <button 
+                      onClick={handleEnterApp}
+                      className="mt-8 bg-white text-primary px-10 py-4 rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-transform active:scale-95"
+                  >
+                      開始旅程 <i className="fas fa-arrow-right ml-2"></i>
+                  </button>
+              </div>
+              <div className="absolute bottom-6 text-white/40 text-xs">Designed for Mobile Experience</div>
+          </div>
+      );
+  }
+
   return (
     <div className="h-full flex flex-col max-w-md mx-auto bg-white shadow-2xl relative">
         
         {/* Header */}
         {activeTab !== 'utility' && activeTab !== 'expenses' && activeTab !== 'backup' && (
-            <header className="bg-primary text-white pt-4 pb-2 px-4 rounded-b-3xl shadow-lg z-20 flex-shrink-0 relative">
-                <div className="flex justify-between items-center mb-4">
+            <header className="bg-primary text-white pt-safe-top pb-2 px-4 rounded-b-3xl shadow-lg z-20 flex-shrink-0 relative">
+                <div className="flex justify-between items-center mb-4 pt-2">
                     <div>
                         <h1 className="text-xl font-bold tracking-wide">古城記憶－北越河內之旅 🇻🇳</h1>
                         <p className="text-teal-200 text-sm mt-1 font-medium">蛋蛋全家旅遊 <span className="mx-1">|</span> <i className="fas fa-map-marker-alt mr-1"></i>Hanoi, Vietnam</p>
@@ -500,13 +564,13 @@ const App: React.FC = () => {
 
         {/* Alternative Simple Header for Non-Itinerary Tabs */}
         {(activeTab === 'utility' || activeTab === 'expenses' || activeTab === 'backup') && (
-            <div className="bg-white p-4 pb-2 flex justify-between items-center z-20 border-b border-slate-100">
-                 <h2 className="text-2xl font-bold text-primary truncate max-w-[70%]">
+            <div className="bg-white p-4 pb-2 pt-safe-top flex justify-between items-center z-20 border-b border-slate-100">
+                 <h2 className="text-2xl font-bold text-primary truncate max-w-[70%] pt-2">
                     {activeTab === 'utility' && (utilityView === 'menu' ? '實用工具 🛠️' : (utilityView === 'currency' ? '匯率換算' : (utilityView === 'packing' ? '行李清單' : (utilityView === 'translator' ? '語音翻譯／常用會話' : (utilityView === 'emergency' ? '緊急聯絡' : (utilityView === 'offline' ? '離線地圖' : '個人筆記'))))))}
                     {activeTab === 'expenses' && '我的錢包 💰'}
                     {activeTab === 'backup' && '更多發現 🌟'}
                  </h2>
-                 <div className="relative">
+                 <div className="relative pt-2">
                     <button 
                         onClick={() => currentUser ? setShowUserMenu(!showUserMenu) : setShowLoginModal(true)}
                         className={`p-2 rounded-full transition-all ${currentUser ? 'bg-amber-400 text-primary font-bold w-10 h-10 flex items-center justify-center' : 'bg-slate-100 text-slate-400'}`}
@@ -1116,7 +1180,7 @@ const App: React.FC = () => {
         )}
 
         {/* Bottom Nav */}
-        <nav className="bg-white h-20 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] flex justify-around items-center px-2 z-40 rounded-t-3xl absolute bottom-0 w-full max-w-md">
+        <nav className="bg-white h-20 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] flex justify-around items-center px-2 z-40 rounded-t-3xl absolute bottom-0 w-full max-w-md pb-safe-bottom">
             {[
                 { id: 'itinerary', label: '行程', icon: 'fas fa-calendar-alt' },
                 { id: 'expenses', label: '記帳', icon: 'fas fa-wallet' },
@@ -1168,7 +1232,7 @@ const App: React.FC = () => {
 
         {/* Expense Modal Overlay */}
         {showExpenseModal && (
-             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 pt-safe-top">
                  <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl p-5 animate-scale-up">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="font-bold text-slate-700 text-lg">{editExpenseId ? '修改' : '新增'}消費 ({currentUser})</h4>
