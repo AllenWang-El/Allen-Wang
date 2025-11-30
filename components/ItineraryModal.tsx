@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { ItineraryItem, DayInfo, CategoryType } from '../types';
 import { CATEGORIES } from '../constants';
@@ -11,9 +12,10 @@ interface ItineraryModalProps {
     days: DayInfo[];
     currentDate: string;
     isBackup?: boolean;
+    currentUser?: string | null;
 }
 
-const ItineraryModal: React.FC<ItineraryModalProps> = ({ isOpen, onClose, onSave, editItem, days, currentDate, isBackup = false }) => {
+const ItineraryModal: React.FC<ItineraryModalProps> = ({ isOpen, onClose, onSave, editItem, days, currentDate, isBackup = false, currentUser }) => {
     const [form, setForm] = useState<Partial<ItineraryItem>>({
         date: currentDate,
         time: '12:00',
@@ -23,7 +25,8 @@ const ItineraryModal: React.FC<ItineraryModalProps> = ({ isOpen, onClose, onSave
         note: '',
         images: [],
         transport: '',
-        duration: ''
+        duration: '',
+        hasAiGuide: false
     });
     const [imageUrl, setImageUrl] = useState('');
 
@@ -42,7 +45,8 @@ const ItineraryModal: React.FC<ItineraryModalProps> = ({ isOpen, onClose, onSave
                     note: '',
                     images: [],
                     transport: '',
-                    duration: ''
+                    duration: '',
+                    hasAiGuide: false
                 });
             }
         }
@@ -186,6 +190,21 @@ const ItineraryModal: React.FC<ItineraryModalProps> = ({ isOpen, onClose, onSave
                             ))}
                         </div>
                     </div>
+
+                    {currentUser === '王宥騰' && (
+                        <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                            <label className="flex items-center space-x-2 text-sm font-bold text-indigo-700">
+                                <input 
+                                    type="checkbox" 
+                                    checked={form.hasAiGuide || false} 
+                                    onChange={e => setForm({...form, hasAiGuide: e.target.checked})} 
+                                    className="accent-indigo-600 w-4 h-4" 
+                                />
+                                <span><i className="fas fa-robot mr-1"></i>啟用 AI 導覽解說</span>
+                            </label>
+                            <p className="text-[10px] text-indigo-400 mt-1 pl-6">勾選後，該景點將顯示 AI 解說按鈕</p>
+                        </div>
+                    )}
 
                     <div>
                         <label className="text-xs font-bold text-amber-600 mb-1 block"><i className="fas fa-star mr-1"></i>備註與介紹</label>

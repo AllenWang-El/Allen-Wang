@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { ItineraryItem, BackupSpot } from '../types';
 import { askAiAboutSpot } from '../services/geminiService';
@@ -24,6 +25,7 @@ interface DisplayItem {
     openTime?: string;
     priceLevel?: string;
     subType?: string;
+    hasAiGuide?: boolean;
 }
 
 interface DetailModalProps {
@@ -138,14 +140,16 @@ const DetailModal: React.FC<DetailModalProps> = ({ item, onClose }) => {
                     
                     <div className="flex justify-between items-center mb-2">
                             <h4 className="font-bold text-slate-800 border-l-4 border-amber-400 pl-2 text-sm">詳細介紹</h4>
-                            <button 
-                                onClick={handleAskAi} 
-                                disabled={aiLoading} 
-                                className="text-xs bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white px-3 py-1 rounded-full font-bold shadow-md hover:scale-105 transition-transform flex items-center disabled:opacity-50"
-                            >
-                            {aiLoading ? <i className="fas fa-spinner fa-spin mr-1"></i> : <i className="fas fa-sparkles mr-1"></i>}
-                            AI 導遊解說
-                            </button>
+                            {displayItem.hasAiGuide && (
+                                <button 
+                                    onClick={handleAskAi} 
+                                    disabled={aiLoading} 
+                                    className="text-xs bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white px-3 py-1 rounded-full font-bold shadow-md hover:scale-105 transition-transform flex items-center disabled:opacity-50"
+                                >
+                                {aiLoading ? <i className="fas fa-spinner fa-spin mr-1"></i> : <i className="fas fa-sparkles mr-1"></i>}
+                                AI 導遊解說
+                                </button>
+                            )}
                     </div>
                     
                     <div 

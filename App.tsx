@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DayInfo, ItineraryItem, Expense, BackupSpot, CategoryType, PackingItem, UtilityTabType, ExpenseCategoryType, Note, TranslationResult } from './types';
 import { INITIAL_DAYS, INITIAL_ITINERARY, INITIAL_EXPENSES, BACKUP_SPOTS, DAY_SUBTITLES, EXCHANGE_RATES, CATEGORIES, INITIAL_PACKING_LIST, CURRENCY_OPTIONS, USERS, EXPENSE_CATEGORIES, EMERGENCY_CONTACTS, OFFLINE_MAP_IMAGES, USEFUL_PHRASES } from './constants';
@@ -7,7 +8,7 @@ import ChatModal from './components/ChatModal';
 import ItineraryModal from './components/ItineraryModal';
 import LoginModal from './components/LoginModal';
 import { translateText } from './services/geminiService';
-import { db, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from './services/firebase';
+import { db, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, writeBatch } from './services/firebase';
 
 const App: React.FC = () => {
   // State
@@ -118,37 +119,55 @@ const App: React.FC = () => {
   }, []);
   
   // SEED FUNCTION (One time use to populate DB if needed)
+  const clearCollection = async (collectionName: string) => {
+      const q = collection(db, collectionName);
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+      });
+      await batch.commit();
+  };
+
   const seedDatabase = async () => {
-      if (window.confirm('確定要初始化資料庫嗎？這會寫入預設資料。')) {
-          localStorage.setItem('db_seeded', 'true');
-          
-          // Seed Itinerary
-          for (const item of INITIAL_ITINERARY) {
-             // remove id from data payload, let firestore gen id or use item.id as doc id? 
-             // simpler to let firestore gen id for syncing, but preserving numeric ID is tricky.
-             // We will treat existing numeric IDs as data fields, but let Firestore assign doc IDs.
-             const { id, ...data } = item; 
-             await addDoc(collection(db, 'itinerary'), { ...data, originalId: id });
+      if (window.confirm('確定要初始化資料庫嗎？這會先清空所有現有資料，然後寫入預設資料。請謹慎操作！')) {
+          try {
+              // Clear existing data first to prevent duplication
+              await clearCollection('itinerary');
+              await clearCollection('expenses');
+              await clearCollection('backup_spots');
+              await clearCollection('packing_list');
+
+              localStorage.setItem('db_seeded', 'true');
+              
+              // Seed Itinerary
+              for (const item of INITIAL_ITINERARY) {
+                 const { id, ...data } = item; 
+                 await addDoc(collection(db, 'itinerary'), { ...data, originalId: id });
+              }
+              
+              // Seed Expenses
+              for (const item of INITIAL_EXPENSES) {
+                 const { id, ...data } = item;
+                 await addDoc(collection(db, 'expenses'), { ...data });
+              }
+              
+               // Seed Backups
+              for (const item of BACKUP_SPOTS) {
+                 const { id, ...data } = item;
+                 await addDoc(collection(db, 'backup_spots'), { ...data });
+              }
+              
+               // Seed Packing
+              for (const item of INITIAL_PACKING_LIST) {
+                 const { id, ...data } = item;
+                 await addDoc(collection(db, 'packing_list'), { ...data });
+              }
+              alert('資料庫初始化完成');
+          } catch (e) {
+              console.error(e);
+              alert('初始化失敗，請檢查 Console');
           }
-          
-          // Seed Expenses
-          for (const item of INITIAL_EXPENSES) {
-             const { id, ...data } = item;
-             await addDoc(collection(db, 'expenses'), { ...data });
-          }
-          
-           // Seed Backups
-          for (const item of BACKUP_SPOTS) {
-             const { id, ...data } = item;
-             await addDoc(collection(db, 'backup_spots'), { ...data });
-          }
-          
-           // Seed Packing
-          for (const item of INITIAL_PACKING_LIST) {
-             const { id, ...data } = item;
-             await addDoc(collection(db, 'packing_list'), { ...data });
-          }
-          alert('資料庫初始化完成');
       }
   };
 
@@ -163,6 +182,8 @@ const App: React.FC = () => {
   // New Utility States
   const [noteContent, setNoteContent] = useState('');
   const [noteDate, setNoteDate] = useState(new Date().toISOString().split('T')[0]);
+  const [editNoteId, setEditNoteId] = useState<string | null>(null);
+  
   const [translation, setTranslation] = useState<TranslationResult | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [speechText, setSpeechText] = useState('');
@@ -456,18 +477,40 @@ const App: React.FC = () => {
       if(!currentUser) return;
       if(!noteContent.trim()) return;
       
-      const newNote = {
-          date: noteDate,
-          content: noteContent,
-          timestamp: Date.now(),
-          userId: currentUser
-      };
-      
-      await addDoc(collection(db, 'notes'), newNote);
+      if (editNoteId) {
+          // Update existing note
+          await updateDoc(doc(db, 'notes', editNoteId), {
+              content: noteContent,
+              date: noteDate,
+              timestamp: Date.now()
+          });
+          setEditNoteId(null);
+          alert('筆記已更新');
+      } else {
+          // Add new note
+          const newNote = {
+              date: noteDate,
+              content: noteContent,
+              timestamp: Date.now(),
+              userId: currentUser
+          };
+          await addDoc(collection(db, 'notes'), newNote);
+          alert('筆記已儲存');
+      }
       setNoteContent('');
-      alert('筆記已儲存');
   };
   
+  const handleEditNote = (note: Note) => {
+      setNoteContent(note.content);
+      setNoteDate(note.date);
+      setEditNoteId(String(note.id));
+  };
+  
+  const handleCancelEditNote = () => {
+      setNoteContent('');
+      setEditNoteId(null);
+  }
+
   const handleDeleteNote = async (id: string | number) => {
       if(!currentUser) return;
       if(window.confirm('確定刪除此筆記?')) {
@@ -475,10 +518,18 @@ const App: React.FC = () => {
       }
   };
 
-  // TTS & Speech (Unchanged logic)
-  const playTTS = (text: string, lang: string) => {
+  // TTS & Speech
+  const playTTS = (text: string, langCode: string) => {
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = lang;
+      u.lang = langCode;
+      
+      // Attempt to find a specific voice for Vietnamese if requested
+      if (langCode === 'vi-VN') {
+          const voices = window.speechSynthesis.getVoices();
+          const viVoice = voices.find(v => v.lang.includes('vi'));
+          if (viVoice) u.voice = viVoice;
+      }
+      
       window.speechSynthesis.speak(u);
   };
 
@@ -545,15 +596,14 @@ const App: React.FC = () => {
                   </div>
                   <h1 className="text-4xl font-bold tracking-wide drop-shadow-md">古城記憶</h1>
                   <p className="text-xl text-teal-100 font-light">北越河內．下龍灣．安子山</p>
-                  <p className="text-sm text-teal-200/80 mt-2">蛋蛋全家旅遊 2024-2025</p>
+                  <p className="text-sm text-teal-200/80 mt-2">蛋蛋全家旅遊</p>
                   
                   <button onClick={handleEnterApp} className="mt-8 bg-white text-primary px-10 py-4 rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-transform active:scale-95">
                       開始旅程 <i className="fas fa-arrow-right ml-2"></i>
                   </button>
 
-                  {/* Optional seed button if needed for first time setup, hidden usually */}
-                  <button onClick={seedDatabase} className="absolute bottom-10 left-0 right-0 mx-auto text-white/20 text-xs">
-                      Initialize DB (Tap if empty)
+                  <button onClick={seedDatabase} className="absolute bottom-10 left-0 right-0 mx-auto text-white/40 hover:text-white text-xs border border-white/20 px-3 py-1 rounded">
+                      重置並初始化資料庫 (修復重複資料)
                   </button>
               </div>
           </div>
@@ -1105,7 +1155,7 @@ const App: React.FC = () => {
                                         <>
                                             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4">
                                                 <div className="flex justify-between items-center mb-2">
-                                                    <h4 className="font-bold text-slate-700">寫日記</h4>
+                                                    <h4 className="font-bold text-slate-700">{editNoteId ? '編輯日記' : '寫日記'}</h4>
                                                     <input 
                                                         type="date" 
                                                         value={noteDate}
@@ -1119,16 +1169,34 @@ const App: React.FC = () => {
                                                     placeholder="今天發生了什麼趣事..." 
                                                     className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 outline-none focus:border-purple-400 text-sm h-24 mb-2"
                                                 ></textarea>
-                                                <button onClick={handleSaveNote} className="w-full bg-purple-500 text-white py-2 rounded-xl font-bold text-sm shadow hover:bg-purple-600 transition-colors">儲存筆記</button>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={handleSaveNote} className="flex-1 bg-purple-500 text-white py-2 rounded-xl font-bold text-sm shadow hover:bg-purple-600 transition-colors">
+                                                        {editNoteId ? '更新筆記' : '儲存筆記'}
+                                                    </button>
+                                                    {editNoteId && (
+                                                        <button onClick={handleCancelEditNote} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">
+                                                            取消
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className="flex-1 overflow-y-auto space-y-3 pb-24">
                                                 {userNotes.length === 0 && <p className="text-center text-slate-400 text-xs py-4">還沒有筆記，寫下第一篇吧！</p>}
                                                 {userNotes.map(note => (
-                                                    <div key={note.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-50 relative group">
+                                                    <div 
+                                                        key={note.id} 
+                                                        onClick={() => handleEditNote(note)}
+                                                        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-50 relative group cursor-pointer hover:border-purple-200 transition-colors"
+                                                    >
                                                         <div className="flex justify-between items-start mb-2">
                                                             <span className="text-xs font-bold text-purple-500 bg-purple-50 px-2 py-1 rounded">{note.date}</span>
-                                                            <button onClick={() => handleDeleteNote(note.id)} className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-trash"></i></button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }} 
+                                                                className="text-slate-300 hover:text-red-400 z-10 p-1"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
                                                         </div>
                                                         <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.content}</p>
                                                     </div>
@@ -1254,6 +1322,7 @@ const App: React.FC = () => {
             days={days}
             currentDate={currentDate}
             isBackup={isBackupMode}
+            currentUser={currentUser}
         />
 
         {showLoginModal && (

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ItineraryItem, TranslationResult } from "../types";
 
@@ -85,7 +86,10 @@ export const translateText = async (text: string, sourceLang: 'zh' | 'vi'): Prom
             }
         });
 
-        const jsonStr = response.text || "{}";
+        // Strip any markdown code blocks if present
+        let jsonStr = response.text || "{}";
+        jsonStr = jsonStr.replace(/```json|```/g, '').trim();
+        
         const result = JSON.parse(jsonStr);
         
         return {

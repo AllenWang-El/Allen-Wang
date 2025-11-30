@@ -24,6 +24,7 @@ export interface ItineraryItem {
     aiContent?: string;
     rating?: number;
     openTime?: string;
+    hasAiGuide?: boolean; // New field to toggle AI feature
 }
 
 export interface Expense {
@@ -58,6 +59,7 @@ export interface BackupSpot {
     subType?: string; 
     rating?: number;
     openTime?: string;
+    hasAiGuide?: boolean; // New field
 }
 
 export interface ChatMessage {
