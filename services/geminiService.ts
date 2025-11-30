@@ -1,5 +1,12 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { ItineraryItem, TranslationResult } from "../types";
+
+// Declare process to avoid TS errors
+declare var process: {
+  env: {
+    API_KEY: string;
+  }
+};
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -51,19 +58,23 @@ export const translateText = async (text: string, sourceLang: 'zh' | 'vi'): Prom
     if (!process.env.API_KEY) return null;
     try {
         const prompt = `Translate the following text: "${text}".
-        Source language: ${sourceLang === 'zh' ? 'Traditional Chinese (Mandarin)' : 'Vietnamese'}.
-        
-        You must output a JSON object with exactly these 3 fields:
-        1. "zh": Traditional Chinese translation.
-        2. "vi": Vietnamese translation.
-        3. "en": English translation.
-        
-        Do not include markdown formatting like \`\`\`json. Just return the raw JSON string.`;
+        Source language: ${sourceLang === 'zh' ? 'Traditional Chinese (Mandarin)' : 'Vietnamese'}.`;
 
         const response = await ai.models.generateContent({
             model: MODEL_NAME,
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        zh: { type: Type.STRING },
+                        vi: { type: Type.STRING },
+                        en: { type: Type.STRING }
+                    },
+                    required: ['zh', 'vi', 'en']
+                }
+            }
         });
 
         const jsonStr = response.text || "{}";
