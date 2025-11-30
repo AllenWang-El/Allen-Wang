@@ -1,0 +1,7 @@
+{
+  "name": "Hanoi Travel - 古城記憶",
+  "description": "A comprehensive travel itinerary manager for Hanoi, Vietnam, featuring expense tracking, interactive maps, and an AI travel assistant.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
