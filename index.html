@@ -1,15 +1,18 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>古城記憶－北越河內之旅</title>
+    <!-- Tailwind via CDN is fine for simplicity -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet & Marked -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
@@ -56,40 +59,33 @@
         .prose ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.5em; }
         .prose strong { color: #0f766e; font-weight: 700; }
         
-        /* Hide spin buttons for number inputs */
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { 
             -webkit-appearance: none; 
             margin: 0; 
         }
-        input[type=number] {
-            -moz-appearance: textfield;
-        }
+        input[type=number] { -moz-appearance: textfield; }
 
-        /* Safe area padding utilities */
-        .pt-safe-top {
-            padding-top: env(safe-area-inset-top, 20px);
-        }
-        .pb-safe-bottom {
-            padding-bottom: env(safe-area-inset-bottom, 20px);
-        }
+        .pt-safe-top { padding-top: env(safe-area-inset-top, 20px); }
+        .pb-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 20px); }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js",
-    "firebase/analytics": "https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
   }
 }
 </script>
 </head>
 <body class="text-slate-800 font-sans h-[100dvh] flex flex-col overflow-hidden bg-slate-100">
     <div id="root" class="h-full w-full"></div>
+    <!-- Point to the index.tsx file for Vite -->
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

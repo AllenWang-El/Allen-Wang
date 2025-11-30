@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { ItineraryItem, TranslationResult } from "../types";
 
@@ -8,6 +7,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const MODEL_NAME = 'gemini-2.5-flash';
 
 export const askAiAboutSpot = async (item: ItineraryItem): Promise<string> => {
+    if (!process.env.API_KEY) return "API Key 未設定，無法使用 AI 功能。";
     try {
         const prompt = `你是專業的越南導遊。請用繁體中文為遊客介紹位於河內的景點：「${item.title}」。
         請包含：1. 歷史背景或特色 (簡短) 2. 參觀重點 3. 一個有趣的冷知識。
@@ -26,6 +26,7 @@ export const askAiAboutSpot = async (item: ItineraryItem): Promise<string> => {
 };
 
 export const sendChatMessage = async (userMsg: string, itinerary: ItineraryItem[]): Promise<string> => {
+    if (!process.env.API_KEY) return "API Key 未設定，無法使用 AI 功能。";
     try {
         const itineraryContext = JSON.stringify(itinerary.map(i => `${i.date} ${i.time} ${i.title}`));
         const systemContext = `你是一個專業的河內旅遊嚮導，正在協助「蛋蛋全家」進行旅遊。
@@ -47,6 +48,7 @@ export const sendChatMessage = async (userMsg: string, itinerary: ItineraryItem[
 };
 
 export const translateText = async (text: string, sourceLang: 'zh' | 'vi'): Promise<TranslationResult | null> => {
+    if (!process.env.API_KEY) return null;
     try {
         const prompt = `Translate the following text: "${text}".
         Source language: ${sourceLang === 'zh' ? 'Traditional Chinese (Mandarin)' : 'Vietnamese'}.
