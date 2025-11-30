@@ -1,4 +1,5 @@
 
+
 export type CategoryType = 'sightseeing' | 'transport' | 'flight' | 'food' | 'shopping' | 'accommodation';
 export type WeatherType = 'sunny' | 'cloudy' | 'rainy';
 export type UtilityTabType = 'currency' | 'packing' | 'translator' | 'emergency' | 'offline' | 'notes'; 
@@ -10,7 +11,7 @@ export interface User {
 }
 
 export interface ItineraryItem {
-    id: number;
+    id: string | number;
     date: string;
     time: string;
     title: string;
@@ -26,7 +27,7 @@ export interface ItineraryItem {
 }
 
 export interface Expense {
-    id: number;
+    id: string | number;
     item: string;
     amount: number;
     currency: 'VND' | 'TWD' | 'USD';
@@ -45,7 +46,7 @@ export interface DayInfo {
 }
 
 export interface BackupSpot {
-    id: number;
+    id: string | number;
     title: string;
     category: CategoryType;
     note: string;
@@ -65,7 +66,7 @@ export interface ChatMessage {
 }
 
 export interface PackingItem {
-    id: number;
+    id: string | number;
     category: string;
     text: string;
     checked: boolean;
@@ -79,10 +80,11 @@ export interface Phrase {
 }
 
 export interface Note {
-    id: number;
+    id: string | number;
     date: string;
     content: string;
     timestamp: number;
+    userId?: string; // To link to specific user
 }
 
 export interface TranslationResult {

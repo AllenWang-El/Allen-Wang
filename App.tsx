@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DayInfo, ItineraryItem, Expense, BackupSpot, CategoryType, PackingItem, UtilityTabType, ExpenseCategoryType, Note, TranslationResult } from './types';
 import { INITIAL_DAYS, INITIAL_ITINERARY, INITIAL_EXPENSES, BACKUP_SPOTS, DAY_SUBTITLES, EXCHANGE_RATES, CATEGORIES, INITIAL_PACKING_LIST, CURRENCY_OPTIONS, USERS, EXPENSE_CATEGORIES, EMERGENCY_CONTACTS, OFFLINE_MAP_IMAGES, USEFUL_PHRASES } from './constants';
@@ -8,6 +7,7 @@ import ChatModal from './components/ChatModal';
 import ItineraryModal from './components/ItineraryModal';
 import LoginModal from './components/LoginModal';
 import { translateText } from './services/geminiService';
+import { db, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from './services/firebase';
 
 const App: React.FC = () => {
   // State
@@ -18,30 +18,22 @@ const App: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const [days, setDays] = useState<DayInfo[]>(INITIAL_DAYS);
-  const [itinerary, setItinerary] = useState<ItineraryItem[]>(() => {
-    const saved = localStorage.getItem('hanoi_itinerary_react');
-    return saved ? JSON.parse(saved) : INITIAL_ITINERARY;
-  });
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem('hanoi_expenses_react');
-    return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
-  });
-  const [backupSpots, setBackupSpots] = useState<BackupSpot[]>(() => {
-    const saved = localStorage.getItem('hanoi_backups_react');
-    return saved ? JSON.parse(saved) : BACKUP_SPOTS;
-  });
+  const [itinerary, setItinerary] = useState<ItineraryItem[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [backupSpots, setBackupSpots] = useState<BackupSpot[]>([]);
   
-  // Persistence for Current State
+  // Local Persistence for UI State only
   useEffect(() => {
       const savedDate = localStorage.getItem('hanoi_current_date');
       const savedTab = localStorage.getItem('hanoi_active_tab');
-      
-      // If we have saved state, load it. If not, show landing page.
       if (savedDate) {
           setCurrentDate(savedDate);
-          setShowLanding(false); // Skip landing if returning user
+          setShowLanding(false);
       }
       if (savedTab) setActiveTab(savedTab);
+      
+      const savedUser = localStorage.getItem('hanoi_current_user');
+      if (savedUser) setCurrentUser(savedUser);
   }, []);
 
   useEffect(() => {
@@ -51,20 +43,124 @@ const App: React.FC = () => {
   useEffect(() => {
       localStorage.setItem('hanoi_active_tab', activeTab);
   }, [activeTab]);
+  
+  useEffect(() => {
+      if(currentUser) localStorage.setItem('hanoi_current_user', currentUser);
+      else localStorage.removeItem('hanoi_current_user');
+  }, [currentUser]);
+
+  // --- FIREBASE SUBSCRIPTIONS ---
+  
+  // Itinerary
+  useEffect(() => {
+      const unsubscribe = onSnapshot(collection(db, 'itinerary'), (snapshot) => {
+          const items: ItineraryItem[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ItineraryItem));
+          // If DB is empty, use initial data (optional: you might want to run a migration script once instead)
+          if (items.length === 0 && !localStorage.getItem('db_seeded')) {
+             // For now, we just set initial data to local state if DB empty to avoid auto-writing without permission
+             setItinerary(INITIAL_ITINERARY); 
+          } else {
+             setItinerary(items);
+          }
+      });
+      return () => unsubscribe();
+  }, []);
+
+  // Expenses
+  useEffect(() => {
+      const unsubscribe = onSnapshot(collection(db, 'expenses'), (snapshot) => {
+          const items: Expense[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense));
+           if (items.length === 0 && !localStorage.getItem('db_seeded')) {
+             setExpenses(INITIAL_EXPENSES);
+          } else {
+             setExpenses(items);
+          }
+      });
+      return () => unsubscribe();
+  }, []);
+
+  // Backup Spots
+  useEffect(() => {
+      const unsubscribe = onSnapshot(collection(db, 'backup_spots'), (snapshot) => {
+          const items: BackupSpot[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BackupSpot));
+          if (items.length === 0 && !localStorage.getItem('db_seeded')) {
+             setBackupSpots(BACKUP_SPOTS);
+          } else {
+             setBackupSpots(items);
+          }
+      });
+      return () => unsubscribe();
+  }, []);
+
+  // Packing List
+  const [packingList, setPackingList] = useState<PackingItem[]>([]);
+  useEffect(() => {
+      const unsubscribe = onSnapshot(collection(db, 'packing_list'), (snapshot) => {
+          const items: PackingItem[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackingItem));
+          if (items.length === 0 && !localStorage.getItem('db_seeded')) {
+             setPackingList(INITIAL_PACKING_LIST);
+          } else {
+             // Sort by ID or creation to keep order stable
+             setPackingList(items.sort((a,b) => String(a.id).localeCompare(String(b.id))));
+          }
+      });
+      return () => unsubscribe();
+  }, []);
+
+  // Notes
+  const [notes, setNotes] = useState<Note[]>([]);
+  useEffect(() => {
+      const unsubscribe = onSnapshot(collection(db, 'notes'), (snapshot) => {
+          const items: Note[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Note));
+          setNotes(items.sort((a,b) => b.timestamp - a.timestamp));
+      });
+      return () => unsubscribe();
+  }, []);
+  
+  // SEED FUNCTION (One time use to populate DB if needed)
+  const seedDatabase = async () => {
+      if (window.confirm('確定要初始化資料庫嗎？這會寫入預設資料。')) {
+          localStorage.setItem('db_seeded', 'true');
+          
+          // Seed Itinerary
+          for (const item of INITIAL_ITINERARY) {
+             // remove id from data payload, let firestore gen id or use item.id as doc id? 
+             // simpler to let firestore gen id for syncing, but preserving numeric ID is tricky.
+             // We will treat existing numeric IDs as data fields, but let Firestore assign doc IDs.
+             const { id, ...data } = item; 
+             await addDoc(collection(db, 'itinerary'), { ...data, originalId: id });
+          }
+          
+          // Seed Expenses
+          for (const item of INITIAL_EXPENSES) {
+             const { id, ...data } = item;
+             await addDoc(collection(db, 'expenses'), { ...data });
+          }
+          
+           // Seed Backups
+          for (const item of BACKUP_SPOTS) {
+             const { id, ...data } = item;
+             await addDoc(collection(db, 'backup_spots'), { ...data });
+          }
+          
+           // Seed Packing
+          for (const item of INITIAL_PACKING_LIST) {
+             const { id, ...data } = item;
+             await addDoc(collection(db, 'packing_list'), { ...data });
+          }
+          alert('資料庫初始化完成');
+      }
+  };
+
 
   // Utility States
   const [utilityView, setUtilityView] = useState<UtilityTabType | 'menu'>('menu');
-  const [packingList, setPackingList] = useState<PackingItem[]>(() => {
-      const saved = localStorage.getItem('hanoi_packing_react');
-      return saved ? JSON.parse(saved) : INITIAL_PACKING_LIST;
-  });
   const [currencyAmount, setCurrencyAmount] = useState<string>('1000');
   const [currencyFrom, setCurrencyFrom] = useState<string>('VND');
   const [currencyTo, setCurrencyTo] = useState<string>('TWD');
   const [newItemText, setNewItemText] = useState('');
 
   // New Utility States
-  const [notes, setNotes] = useState<Note[]>([]);
   const [noteContent, setNoteContent] = useState('');
   const [noteDate, setNoteDate] = useState(new Date().toISOString().split('T')[0]);
   const [translation, setTranslation] = useState<TranslationResult | null>(null);
@@ -84,29 +180,12 @@ const App: React.FC = () => {
 
   // Expense Form State
   const [showExpenseModal, setShowExpenseModal] = useState(false);
-  const [editExpenseId, setEditExpenseId] = useState<number | null>(null);
+  const [editExpenseId, setEditExpenseId] = useState<string | number | null>(null);
   const [newExpense, setNewExpense] = useState<{
       item: string, amount: string, currency: 'VND'|'TWD'|'USD', category: ExpenseCategoryType, isSplit: boolean, beneficiaries: string[] 
   }>({
     item: '', amount: '', currency: 'VND', category: 'food', isSplit: true, beneficiaries: USERS.map(u => u.name)
   });
-
-  // Persistence
-  useEffect(() => { localStorage.setItem('hanoi_itinerary_react', JSON.stringify(itinerary)); }, [itinerary]);
-  useEffect(() => { localStorage.setItem('hanoi_expenses_react', JSON.stringify(expenses)); }, [expenses]);
-  useEffect(() => { localStorage.setItem('hanoi_backups_react', JSON.stringify(backupSpots)); }, [backupSpots]);
-  useEffect(() => { localStorage.setItem('hanoi_packing_react', JSON.stringify(packingList)); }, [packingList]);
-
-  // Load Notes on User Change
-  useEffect(() => {
-      if (currentUser) {
-          const savedNotes = localStorage.getItem(`hanoi_notes_${currentUser}`);
-          if (savedNotes) setNotes(JSON.parse(savedNotes));
-          else setNotes([]);
-      } else {
-          setNotes([]);
-      }
-  }, [currentUser]);
 
   // Derived State
   const filteredItinerary = useMemo(() => {
@@ -191,7 +270,8 @@ const App: React.FC = () => {
         .sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  // Handlers
+  // --- FIREBASE CRUD HANDLERS ---
+
   const handleAddItem = () => {
       setEditItem(undefined);
       setIsBackupMode(false);
@@ -210,32 +290,34 @@ const App: React.FC = () => {
       setShowItineraryModal(true);
   };
 
-  const handleDeleteItem = (id: number) => {
+  const handleDeleteItem = async (id: string | number) => {
       if (window.confirm("確定刪除此行程？")) {
-          setItinerary(prev => prev.filter(i => i.id !== id));
+          try {
+             await deleteDoc(doc(db, 'itinerary', String(id)));
+          } catch (e) { console.error(e); }
       }
   };
 
-  const handleSaveItinerary = (data: Partial<ItineraryItem>) => {
+  const handleSaveItinerary = async (data: Partial<ItineraryItem>) => {
+      const { id, ...itemData } = data;
+      
       if (isBackupMode) {
-           const newSpot: BackupSpot = {
-              id: editItem?.id || Date.now(),
+           // Add to Backup Spots
+           await addDoc(collection(db, 'backup_spots'), {
               title: data.title || '未命名',
               category: data.category || 'sightseeing',
               note: data.note || '',
               location: data.location || '',
-              images: data.images
-          };
-          setBackupSpots(prev => [newSpot, ...prev]);
+              images: data.images || []
+           });
       } else {
-          if (editItem) {
-              setItinerary(prev => prev.map(i => i.id === editItem.id ? { ...i, ...data } as ItineraryItem : i));
+          // Itinerary
+          if (editItem && editItem.id) {
+              // Update
+              await updateDoc(doc(db, 'itinerary', String(editItem.id)), itemData);
           } else {
-              const newItem = {
-                  ...data,
-                  id: Date.now(),
-              } as ItineraryItem;
-              setItinerary(prev => [...prev, newItem]);
+              // Create
+              await addDoc(collection(db, 'itinerary'), itemData);
           }
       }
   };
@@ -280,40 +362,38 @@ const App: React.FC = () => {
       setShowExpenseModal(true);
   };
 
-  const handleSaveExpense = () => {
+  const handleSaveExpense = async () => {
       if (!newExpense.item || !newExpense.amount) return;
       if (!currentUser) return alert('請先登入');
 
       const beneficiaries = newExpense.isSplit ? newExpense.beneficiaries : [currentUser];
+      const expenseData = {
+          item: newExpense.item,
+          amount: parseFloat(newExpense.amount),
+          currency: newExpense.currency,
+          category: newExpense.category,
+          payer: currentUser,
+          beneficiaries: beneficiaries,
+          date: new Date().toISOString()
+      };
       
-      if (editExpenseId) {
-          setExpenses(prev => prev.map(e => e.id === editExpenseId ? {
-              ...e,
-              item: newExpense.item,
-              amount: parseFloat(newExpense.amount),
-              currency: newExpense.currency,
-              category: newExpense.category,
-              beneficiaries: beneficiaries
-          } : e));
-      } else {
-          setExpenses(prev => [{
-              id: Date.now(),
-              item: newExpense.item,
-              amount: parseFloat(newExpense.amount),
-              currency: newExpense.currency,
-              category: newExpense.category,
-              payer: currentUser,
-              beneficiaries: beneficiaries,
-              date: new Date().toISOString()
-          }, ...prev]);
+      try {
+          if (editExpenseId) {
+             const { payer, date, ...updateData } = expenseData; // Keep original payer/date mostly? Actually payer can be kept.
+             await updateDoc(doc(db, 'expenses', String(editExpenseId)), updateData);
+          } else {
+             await addDoc(collection(db, 'expenses'), expenseData);
+          }
+          setShowExpenseModal(false);
+      } catch (e) {
+          alert('儲存失敗');
+          console.error(e);
       }
-      
-      setShowExpenseModal(false);
   };
 
-  const handleDeleteExpense = (id: number) => {
+  const handleDeleteExpense = async (id: string | number) => {
       if(window.confirm('刪除這筆支出紀錄?')) {
-          setExpenses(prev => prev.filter(i => i.id !== id));
+          await deleteDoc(doc(db, 'expenses', String(id)));
       }
   };
 
@@ -328,19 +408,18 @@ const App: React.FC = () => {
       });
   };
 
-  const handleMoveSpotToItinerary = (e: React.MouseEvent, spot: BackupSpot) => {
+  const handleMoveSpotToItinerary = async (e: React.MouseEvent, spot: BackupSpot) => {
       e.stopPropagation();
-      const newItem: ItineraryItem = {
-          id: Date.now(),
+      const newItem = {
           date: currentDate,
           time: '10:00',
           title: spot.title,
           location: spot.location || '從更多發現加入',
           category: spot.category,
           note: spot.note,
-          images: spot.images
+          images: spot.images || []
       };
-      setItinerary(prev => [...prev, newItem]);
+      await addDoc(collection(db, 'itinerary'), newItem);
       setActiveTab('itinerary');
       alert(`已將「${spot.title}」加入 ${currentDate} 行程！`);
   };
@@ -351,26 +430,52 @@ const App: React.FC = () => {
       window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
   };
 
-  // Utility Handlers
-  const togglePackingItem = (id: number) => {
-      setPackingList(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
+  // Utility Handlers - Firebase Integration
+  const togglePackingItem = async (id: string | number) => {
+      const item = packingList.find(i => i.id === id);
+      if (item) {
+          await updateDoc(doc(db, 'packing_list', String(id)), { checked: !item.checked });
+      }
   };
 
-  const deletePackingItem = (id: number) => {
-      setPackingList(prev => prev.filter(i => i.id !== id));
+  const deletePackingItem = async (id: string | number) => {
+      if(confirm('刪除?')) await deleteDoc(doc(db, 'packing_list', String(id)));
   };
 
-  const addPackingItem = () => {
+  const addPackingItem = async () => {
       if (!newItemText.trim()) return;
-      setPackingList(prev => [...prev, {
-          id: Date.now(),
+      await addDoc(collection(db, 'packing_list'), {
           category: '自訂',
           text: newItemText,
           checked: false
-      }]);
+      });
       setNewItemText('');
   };
 
+  const handleSaveNote = async () => {
+      if(!currentUser) return;
+      if(!noteContent.trim()) return;
+      
+      const newNote = {
+          date: noteDate,
+          content: noteContent,
+          timestamp: Date.now(),
+          userId: currentUser
+      };
+      
+      await addDoc(collection(db, 'notes'), newNote);
+      setNoteContent('');
+      alert('筆記已儲存');
+  };
+  
+  const handleDeleteNote = async (id: string | number) => {
+      if(!currentUser) return;
+      if(window.confirm('確定刪除此筆記?')) {
+          await deleteDoc(doc(db, 'notes', String(id)));
+      }
+  };
+
+  // TTS & Speech (Unchanged logic)
   const playTTS = (text: string, lang: string) => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = lang;
@@ -378,25 +483,17 @@ const App: React.FC = () => {
   };
 
   const handleStartListening = (lang: 'zh' | 'vi') => {
-      // Browser compatibility check
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      
       if (!SpeechRecognition) {
           alert("抱歉，您的手機或瀏覽器不支援語音辨識功能。\n請嘗試使用 Chrome 或 Safari 瀏覽器。");
           return;
       }
-      
       try {
           const recognition = new SpeechRecognition();
           recognition.lang = lang === 'zh' ? 'zh-TW' : 'vi-VN';
           recognition.continuous = false;
           recognition.interimResults = false;
-
-          recognition.onstart = () => {
-              setIsTranslating(true);
-              setSpeechText('聆聽中...');
-          };
-
+          recognition.onstart = () => { setIsTranslating(true); setSpeechText('聆聽中...'); };
           recognition.onresult = async (event: any) => {
               const transcript = event.results[0][0].transcript;
               setSpeechText(transcript);
@@ -404,75 +501,22 @@ const App: React.FC = () => {
               setTranslation(result);
               setIsTranslating(false);
           };
-
           recognition.onerror = (event: any) => {
-              console.error("Speech error", event);
               setIsTranslating(false);
               setSpeechText('辨識失敗');
               alert(`語音辨識錯誤: ${event.error || '未知錯誤'}\n請確保已授權麥克風權限。`);
           };
-
           recognition.onend = () => {
-              // If stopped without result, reset state
-              if (speechText === '聆聽中...') {
-                  setIsTranslating(false);
-                  setSpeechText('');
-              }
+              if (speechText === '聆聽中...') { setIsTranslating(false); setSpeechText(''); }
           };
-
           recognition.start();
-      } catch (err) {
-          alert("啟動語音辨識時發生錯誤。請確認您的麥克風權限。");
-      }
-  };
-  
-  const handleSaveNote = () => {
-      if(!currentUser) return;
-      if(!noteContent.trim()) return;
-      
-      const newNote: Note = {
-          id: Date.now(),
-          date: noteDate,
-          content: noteContent,
-          timestamp: Date.now()
-      };
-      
-      const updatedNotes = [newNote, ...notes];
-      setNotes(updatedNotes);
-      localStorage.setItem(`hanoi_notes_${currentUser}`, JSON.stringify(updatedNotes));
-      setNoteContent('');
-      alert('筆記已儲存');
-  };
-  
-  const handleDeleteNote = (id: number) => {
-      if(!currentUser) return;
-      if(window.confirm('確定刪除此筆記?')) {
-          const updatedNotes = notes.filter(n => n.id !== id);
-          setNotes(updatedNotes);
-          localStorage.setItem(`hanoi_notes_${currentUser}`, JSON.stringify(updatedNotes));
-      }
+      } catch (err) { alert("啟動語音辨識時發生錯誤。請確認您的麥克風權限。"); }
   };
 
-  const handleSpotClick = (spot: BackupSpot) => {
-     setSelectedSpot(spot);
-  };
-
-  const handleLogout = () => {
-      setCurrentUser(null);
-      setShowUserMenu(false);
-  };
-
-  const handleSwitchUser = () => {
-      setCurrentUser(null);
-      setShowUserMenu(false);
-      setShowLoginModal(true);
-  };
-
-  const handleEnterApp = () => {
-      setShowLanding(false);
-  };
-
-  // Helper styles
+  const handleSpotClick = (spot: BackupSpot) => { setSelectedSpot(spot); };
+  const handleLogout = () => { setCurrentUser(null); setShowUserMenu(false); };
+  const handleSwitchUser = () => { setCurrentUser(null); setShowUserMenu(false); setShowLoginModal(true); };
+  const handleEnterApp = () => { setShowLanding(false); };
   const getCategoryColor = (cat: CategoryType) => {
       const colors: Record<string, string> = {
           sightseeing: 'border-l-amber-400',
@@ -484,7 +528,6 @@ const App: React.FC = () => {
       };
       return colors[cat] || 'border-l-slate-400';
   };
-
   const getWeatherIcon = (w?: string) => {
       if(w === 'rainy') return 'fas fa-umbrella';
       if(w === 'cloudy') return 'fas fa-cloud';
@@ -504,17 +547,21 @@ const App: React.FC = () => {
                   <p className="text-xl text-teal-100 font-light">北越河內．下龍灣．安子山</p>
                   <p className="text-sm text-teal-200/80 mt-2">蛋蛋全家旅遊 2024-2025</p>
                   
-                  <button 
-                      onClick={handleEnterApp}
-                      className="mt-8 bg-white text-primary px-10 py-4 rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-transform active:scale-95"
-                  >
+                  <button onClick={handleEnterApp} className="mt-8 bg-white text-primary px-10 py-4 rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-transform active:scale-95">
                       開始旅程 <i className="fas fa-arrow-right ml-2"></i>
                   </button>
+
+                  {/* Optional seed button if needed for first time setup, hidden usually */}
+                  <button onClick={seedDatabase} className="absolute bottom-10 left-0 right-0 mx-auto text-white/20 text-xs">
+                      Initialize DB (Tap if empty)
+                  </button>
               </div>
-              <div className="absolute bottom-6 text-white/40 text-xs">Designed for Mobile Experience</div>
           </div>
       );
   }
+
+  // Filter notes for current user
+  const userNotes = notes.filter(n => n.userId === currentUser);
 
   return (
     <div className="h-full flex flex-col max-w-md mx-auto bg-white shadow-2xl relative">
@@ -1076,8 +1123,8 @@ const App: React.FC = () => {
                                             </div>
 
                                             <div className="flex-1 overflow-y-auto space-y-3 pb-24">
-                                                {notes.length === 0 && <p className="text-center text-slate-400 text-xs py-4">還沒有筆記，寫下第一篇吧！</p>}
-                                                {notes.map(note => (
+                                                {userNotes.length === 0 && <p className="text-center text-slate-400 text-xs py-4">還沒有筆記，寫下第一篇吧！</p>}
+                                                {userNotes.map(note => (
                                                     <div key={note.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-50 relative group">
                                                         <div className="flex justify-between items-start mb-2">
                                                             <span className="text-xs font-bold text-purple-500 bg-purple-50 px-2 py-1 rounded">{note.date}</span>
