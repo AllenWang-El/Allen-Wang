@@ -1,0 +1,22 @@
+{
+  "name": "古城記憶 - 北越河內之旅",
+  "short_name": "河內之旅",
+  "description": "蛋蛋全家的個人化旅遊 App。",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f766e",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
